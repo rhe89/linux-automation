@@ -116,6 +116,15 @@ else
 fi
 
 echo "--------------------------------------------"
+echo "Installing downloaded .deb files"
+if [[ -d "$downloads_dir" ]] && [[ "$(ls -A "$downloads_dir"/*.deb 2>/dev/null)" ]]; then
+  sudo apt-get update
+  sudo apt-get install -y -f "$downloads_dir"/*.deb
+else
+  echo "No .deb files found in $downloads_dir; skipping deb installs"
+fi
+
+echo "--------------------------------------------"
 echo "Installing nvm"
 if [[ ! -d "$HOME/.nvm" ]]; then
   curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
