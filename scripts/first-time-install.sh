@@ -27,24 +27,7 @@ fi
 echo "--------------------------------------------"
 echo "Installing base packages (apt)"
 if command -v apt-get >/dev/null 2>&1; then
-  # Ensure apt cache and minimal tools are available to add external repos
   sudo apt-get update
-  sudo apt-get install -y --no-install-recommends wget gpg ca-certificates apt-transport-https
-
-  # Add Microsoft GPG key and VS Code repository so 'code' can be installed via apt
-  if [[ ! -f /usr/share/keyrings/packages.microsoft.gpg ]]; then
-    curl -fsSL https://packages.microsoft.com/keys/microsoft.asc |
-      gpg --dearmor | sudo tee /usr/share/keyrings/packages.microsoft.gpg >/dev/null
-  fi
-
-  if [[ ! -f /etc/apt/sources.list.d/vscode.list ]]; then
-    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" |
-      sudo tee /etc/apt/sources.list.d/vscode.list >/dev/null
-  fi
-
-  # Refresh package lists again now that external repos are configured
-  sudo apt-get update
-
   if [[ -f "$apt_packages_path" ]]; then
     sudo apt-get install -y $(grep -vE '^\s*(#|$)' "$apt_packages_path")
   else
