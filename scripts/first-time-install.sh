@@ -117,11 +117,17 @@ fi
 
 echo "--------------------------------------------"
 echo "Installing downloaded .deb files"
-if [[ -d "$downloads_dir" ]] && [[ "$(ls -A "$downloads_dir"/*.deb 2>/dev/null)" ]]; then
+if [[ -d "$downloads_dir" ]] && [[ "$(ls -A "$downloads_dir" 2>/dev/null)" ]]; then
   sudo apt-get update
-  sudo apt-get install -y -f "$downloads_dir"/*.deb
+  # Install all files in downloads dir using dpkg (works with or without .deb extension)
+  for file in "$downloads_dir"/*; do
+    if [[ -f "$file" ]]; then
+      echo "Installing $file"
+      sudo dpkg -i "$file" || sudo apt-get install -y -f
+    fi
+  done
 else
-  echo "No .deb files found in $downloads_dir; skipping deb installs"
+  echo "No files found in $downloads_dir; skipping deb installs"
 fi
 
 echo "--------------------------------------------"
