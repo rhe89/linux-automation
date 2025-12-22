@@ -1,0 +1,5 @@
+# Debian/Ubuntu .deb download links (arm64)
+# Visual Studio Code (stable) - arm64
+https://update.code.visualstudio.com/latest/linux-deb-arm64/stable
+# 1Password (stable) - arm64
+https://downloads.1password.com/linux/debian/arm64/stable/1password-latest.deb

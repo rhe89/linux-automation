@@ -8,6 +8,12 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root_dir="$(cd "$script_dir/.." && pwd)"
 
 dotfiles_dir="$root_dir/dotfiles"
+deb_links_file="${3:-}"
+if [[ -z "$deb_links_file" ]]; then
+  deb_links_file="$root_dir/deb-download-links.txt"
+fi
+
+downloads_dir="$root_dir/downloads"
 if [[ -z "$apt_packages_path" ]]; then
   apt_packages_path="$root_dir/apt-packages-ubuntu.txt"
 fi
@@ -85,6 +91,28 @@ if command -v snap >/dev/null 2>&1; then
   fi
 else
   echo "snap not found; skipping snap installs"
+fi
+
+echo "--------------------------------------------"
+echo "Downloading .deb files"
+if [[ -f "$deb_links_file" ]]; then
+  mkdir -p "$downloads_dir"
+  if ! command -v wget >/dev/null 2>&1; then
+    if command -v apt-get >/dev/null 2>&1; then
+      sudo apt-get update
+      sudo apt-get install -y wget
+    else
+      echo "wget not found and apt-get unavailable; cannot download .deb files"
+    fi
+  fi
+
+  while IFS= read -r url; do
+    [[ "$url" =~ ^\s*(#|$) ]] && continue
+    echo "Downloading $url"
+    wget -c -P "$downloads_dir" "$url" || echo "Failed to download $url"
+  done < "$deb_links_file"
+else
+  echo ".deb links file not found at: $deb_links_file; skipping downloads"
 fi
 
 echo "--------------------------------------------"

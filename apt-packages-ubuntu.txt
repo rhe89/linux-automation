@@ -6,6 +6,7 @@ build-essential
 zsh
 jq
 zsh-syntax-highlighting
+fonts-firacode
 
 ripgrep
 unzip
