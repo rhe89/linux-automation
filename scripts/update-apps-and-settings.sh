@@ -14,7 +14,7 @@ fi
 cd "$root_dir"
 
 echo "--------------------------------------------"
-echo "Pulling latest version from origin (if repo)"
+echo "Pulling latest version from origin"
 if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   git pull --ff-only || true
 fi
