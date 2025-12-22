@@ -43,6 +43,28 @@ echo "Copying dotfiles to home folder"
 cp -rf "$dotfiles_dir/." "$HOME/"
 
 echo "--------------------------------------------"
+echo "Installing oh-my-zsh"
+if [[ ! -d "$HOME/.oh-my-zsh" ]]; then
+  if ! command -v zsh >/dev/null 2>&1; then
+    if command -v apt-get >/dev/null 2>&1; then
+      sudo apt-get update
+      sudo apt-get install -y zsh
+    else
+      echo "zsh not found and apt-get unavailable; skipping oh-my-zsh install"
+    fi
+  fi
+
+  if command -v curl >/dev/null 2>&1; then
+    # Keep existing .zshrc from dotfiles, do not change default shell, do not auto-run zsh
+    RUNZSH=no CHSH=no KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+  else
+    echo "curl not found; cannot install oh-my-zsh"
+  fi
+else
+  echo "oh-my-zsh already installed; skipping"
+fi
+
+echo "--------------------------------------------"
 echo "Installing packages (snap)"
 if ! command -v snap >/dev/null 2>&1; then
   if command -v apt-get >/dev/null 2>&1; then
