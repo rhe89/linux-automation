@@ -1,0 +1,12 @@
+# Curated snap package list for Ubuntu
+# Used by scripts/first-time-install.sh
+#
+# Format: one snap per line.
+# You can include flags, e.g.:
+#   code --classic
+
+code --classic
+
+docker
+
+kubectl --classic

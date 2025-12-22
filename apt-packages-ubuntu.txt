@@ -1,0 +1,17 @@
+# Curated apt package list for Ubuntu
+# Used by scripts/first-time-install.sh
+
+zsh
+ca-certificates
+curl
+git
+build-essential
+zsh
+jq
+zsh-syntax-highlighting
+
+# Nice-to-have CLI
+ripgrep
+unzip
+python3
+python3-pip
