@@ -156,6 +156,19 @@ setup_brave_repo_install() {
   apt_install brave-browser
 }
 
+setup_atuin_repo_install() {
+  log "Installerer Atuin (offisielt APT repo)"
+  install -d -m 0755 /etc/apt/keyrings
+  curl -fsSL https://atuin.sh/gpg.pub \
+    | gpg --dearmor -o /etc/apt/keyrings/atuin-archive-keyring.gpg
+
+  echo "deb [signed-by=/etc/apt/keyrings/atuin-archive-keyring.gpg] https://atuin.sh/repo debian main" \
+    > /etc/apt/sources.list.d/atuin.list
+
+  apt_update
+  apt_install atuin
+}
+
 install_discord_deb() {
   log "Installerer Discord (offisiell .deb)"
   local tmpdir; tmpdir="$(mktemp -d)"
@@ -297,8 +310,13 @@ install_docker_and_compose() {
 
   local u; u="$(invoking_user)"
   if [[ -n "$u" && "$u" != "root" ]]; then
-    usermod -aG docker "$u" || true
-    warn "Brukeren '$u' er lagt i docker-gruppen. Dette krever ny innlogging (logg ut/inn eller reboot)."
+    # Sjekk om brukeren allerede er i docker-gruppen
+    if ! groups "$u" | grep -qw docker; then
+      usermod -aG docker "$u" || true
+      warn "Brukeren '$u' er lagt i docker-gruppen. Dette krever ny innlogging (logg ut/inn eller reboot)."
+      warn "MSSQL docker-oppsett vil bli hoppet over. Kjør 'docker compose up -d' i ~/docker/mssql etter innlogging."
+      export SKIP_MSSQL_START=1
+    fi
   fi
 }
 
@@ -330,13 +348,28 @@ volumes:
   mssql_data:
 EOF
 
-  if [[ -n "${u:-}" && "${u:-}" != "root" ]]; then
-    su - "$u" -c "cd '$dir' && docker compose up -d"
-  else
-    (cd "$dir" && docker compose up -d)
+  # Hopp over start hvis brukeren nettopp ble lagt til i docker-gruppen
+  if [[ "${SKIP_MSSQL_START:-0}" == "1" ]]; then
+    log "MSSQL docker-compose.yml opprettet i $dir"
+    log "Start MSSQL etter reboot/innlogging med: cd $dir && docker compose up -d"
+    return 0
   fi
 
-  log "MSSQL kjører nå på localhost:1433 (user=sa)."
+  if [[ -n "${u:-}" && "${u:-}" != "root" ]]; then
+    if su - "$u" -c "cd '$dir' && docker compose up -d" 2>/dev/null; then
+      log "MSSQL kjører nå på localhost:1433 (user=sa)."
+    else
+      warn "Kunne ikke starte MSSQL (trolig docker-gruppemedlemskap ikke aktivt ennå)."
+      log "Start manuelt etter reboot: cd $dir && docker compose up -d"
+    fi
+  else
+    if (cd "$dir" && docker compose up -d); then
+      log "MSSQL kjører nå på localhost:1433 (user=sa)."
+    else
+      warn "Kunne ikke starte MSSQL."
+      log "Start manuelt: cd $dir && docker compose up -d"
+    fi
+  fi
 }
 
 main() {
@@ -349,6 +382,7 @@ main() {
   setup_1password_repo_install
   setup_vscode_repo_install
   setup_brave_repo_install
+  setup_atuin_repo_install
 
   install_discord_deb
   install_slack_deb
