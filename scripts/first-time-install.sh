@@ -169,6 +169,25 @@ setup_atuin_repo_install() {
   apt_install atuin
 }
 
+install_development_tools() {
+  log "Installerer utviklingsverktøy (git, pre-commit, docker, etc.)"
+  apt_update
+  apt_install git pre-commit docker.io docker-compose-plugin
+  
+  systemctl enable --now docker
+
+  local u; u="$(invoking_user)"
+  if [[ -n "$u" && "$u" != "root" ]]; then
+    # Sjekk om brukeren allerede er i docker-gruppen
+    if ! groups "$u" | grep -qw docker; then
+      usermod -aG docker "$u" || true
+      warn "Brukeren '$u' er lagt i docker-gruppen. Dette krever ny innlogging (logg ut/inn eller reboot)."
+      warn "MSSQL docker-oppsett vil bli hoppet over. Kjør 'docker compose up -d' i ~/docker/mssql etter innlogging."
+      export SKIP_MSSQL_START=1
+    fi
+  fi
+}
+
 install_discord_deb() {
   log "Installerer Discord (offisiell .deb)"
   local tmpdir; tmpdir="$(mktemp -d)"
@@ -302,24 +321,6 @@ EOF
   log "JetBrains Toolbox installert. Start med: jetbrains-toolbox (installer IntelliJ derfra)."
 }
 
-install_docker_and_compose() {
-  log "Installerer Docker (docker.io + compose plugin)"
-  apt_update
-  apt_install docker.io docker-compose-plugin
-  systemctl enable --now docker
-
-  local u; u="$(invoking_user)"
-  if [[ -n "$u" && "$u" != "root" ]]; then
-    # Sjekk om brukeren allerede er i docker-gruppen
-    if ! groups "$u" | grep -qw docker; then
-      usermod -aG docker "$u" || true
-      warn "Brukeren '$u' er lagt i docker-gruppen. Dette krever ny innlogging (logg ut/inn eller reboot)."
-      warn "MSSQL docker-oppsett vil bli hoppet over. Kjør 'docker compose up -d' i ~/docker/mssql etter innlogging."
-      export SKIP_MSSQL_START=1
-    fi
-  fi
-}
-
 setup_mssql_compose_and_start() {
   log "Setter opp MSSQL via docker compose (SA-passord: MSSQLonDocker19)"
   local u h dir
@@ -384,12 +385,12 @@ main() {
   setup_brave_repo_install
   setup_atuin_repo_install
 
+  install_development_tools
   install_discord_deb
   install_slack_deb
   install_postman_tarball
   install_intellij
 
-  install_docker_and_compose
   setup_mssql_compose_and_start
 
   log "Ferdig."
