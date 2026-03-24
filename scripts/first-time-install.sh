@@ -55,7 +55,7 @@ install_base_prereqs() {
   log "Installerer basisverktøy (curl, gpg, osv.)"
   apt_update
   apt_install ca-certificates curl wget gpg apt-transport-https software-properties-common lsb-release \
-              gnupg2 xdg-utils desktop-file-utils jq
+              gnupg2 xdg-utils desktop-file-utils jq build-essential unzip zip xclip
 }
 
 remove_snaps_and_prefer_native() {
@@ -68,6 +68,9 @@ remove_snaps_and_prefer_native() {
 
   # Postman finnes som snap; vi foretrekker /opt-install
   remove_snap_if_present "postman"
+
+  # VS Code: foretrekker Microsoft APT-repo fremfor snap
+  remove_snap_if_present "code"
 
   # IntelliJ via snap (begge varianter)
   remove_snap_if_present "intellij-idea-community"
@@ -172,7 +175,7 @@ setup_atuin_repo_install() {
 install_development_tools() {
   log "Installerer utviklingsverktøy (git, pre-commit, docker, etc.)"
   apt_update
-  apt_install git pre-commit docker.io docker-compose-plugin
+  apt_install git pre-commit docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   
   systemctl enable --now docker
 
@@ -373,10 +376,134 @@ EOF
   fi
 }
 
+setup_docker_ce_repo_install() {
+  log "Legger til Docker CE APT repo (offisielt)"
+  install -d -m 0755 /etc/apt/keyrings
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+    | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  chmod a+r /etc/apt/keyrings/docker.gpg
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
+    > /etc/apt/sources.list.d/docker.list
+  apt_update
+}
+
+install_shell_tools() {
+  log "Installerer shell-verktøy (zsh, ripgrep, fonter, syntax highlighting)"
+  apt_install zsh ripgrep fonts-firacode zsh-syntax-highlighting
+}
+
+install_language_packs() {
+  log "Installerer norsk språkpakke og stavekontroll"
+  apt_install language-pack-nb language-pack-gnome-nb hunspell-no wnorwegian
+}
+
+install_python_tools() {
+  log "Installerer Python-verktøy (pipx, pip, venv, osv.)"
+  apt_install pipx python3-pip python3-venv python3-netifaces
+}
+
+install_email_client() {
+  log "Installerer e-postklient (Evolution med Exchange-støtte)"
+  apt_install evolution evolution-ews
+}
+
+setup_azure_cli_repo_install() {
+  log "Installerer Azure CLI (Microsoft APT repo)"
+  # Gjenbruker Microsoft GPG-nøkkel lagt til av setup_vscode_repo_install
+  local codename; codename="$(lsb_release -cs)"
+  cat >/etc/apt/sources.list.d/azure-cli.sources <<EOF
+Types: deb
+URIs: https://packages.microsoft.com/repos/azure-cli/
+Suites: ${codename}
+Components: main
+Architectures: amd64,arm64,armhf
+Signed-By: /usr/share/keyrings/microsoft.gpg
+EOF
+  apt_update
+  apt_install azure-cli
+}
+
+setup_dotnet_repo_install() {
+  log "Installerer .NET SDK 10 (Microsoft APT repo)"
+  # Gjenbruker Microsoft GPG-nøkkel lagt til av setup_vscode_repo_install
+  local codename; codename="$(lsb_release -cs)"
+  local version; version="$(lsb_release -rs)"
+  cat >/etc/apt/sources.list.d/microsoft-prod.sources <<EOF
+Types: deb
+URIs: https://packages.microsoft.com/ubuntu/${version}/prod
+Suites: ${codename}
+Components: main
+Architectures: amd64,arm64,armhf
+Signed-By: /usr/share/keyrings/microsoft.gpg
+EOF
+  apt_update
+  apt_install dotnet-sdk-10.0
+}
+
+setup_kubectl_repo_install() {
+  log "Installerer kubectl (Kubernetes APT repo)"
+  local kube_minor
+  kube_minor="$(curl -fsSL https://dl.k8s.io/release/stable.txt | grep -oP 'v[0-9]+\.[0-9]+')" \
+    || kube_minor="v1.32"
+  install -d -m 0755 /etc/apt/keyrings
+  curl -fsSL "https://pkgs.k8s.io/core:/stable:/${kube_minor}/deb/Release.key" \
+    | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+  chmod a+r /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+  echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/${kube_minor}/deb/ /" \
+    > /etc/apt/sources.list.d/kubernetes.list
+  apt_update
+  apt_install kubectl
+  log "kubectl installert: $(kubectl version --client 2>/dev/null || true)"
+}
+
+install_k9s_binary() {
+  log "Installerer k9s (Kubernetes TUI)"
+  local tmpdir; tmpdir="$(mktemp -d)"
+  trap 'rm -rf "$tmpdir"' RETURN
+
+  local tag
+  tag="$(curl -fsSL "https://api.github.com/repos/derailed/k9s/releases/latest" | jq -r '.tag_name')" \
+    || die "Klarte ikke å hente k9s versjon."
+
+  download_with_ua \
+    "https://github.com/derailed/k9s/releases/download/${tag}/k9s_Linux_amd64.tar.gz" \
+    "$tmpdir/k9s.tar.gz" || die "k9s-nedlasting feilet."
+
+  tar -xzf "$tmpdir/k9s.tar.gz" -C "$tmpdir" k9s
+  install -m 0755 "$tmpdir/k9s" /usr/local/bin/k9s
+  log "k9s installert: $(k9s version --short 2>/dev/null || true)"
+}
+
+install_kubelogin_binary() {
+  log "Installerer kubelogin (Azure AD kubectl auth plugin)"
+  local tmpdir; tmpdir="$(mktemp -d)"
+  trap 'rm -rf "$tmpdir"' RETURN
+
+  local tag
+  tag="$(curl -fsSL "https://api.github.com/repos/Azure/kubelogin/releases/latest" | jq -r '.tag_name')" \
+    || die "Klarte ikke å hente kubelogin versjon."
+
+  download_with_ua \
+    "https://github.com/Azure/kubelogin/releases/download/${tag}/kubelogin-linux-amd64.zip" \
+    "$tmpdir/kubelogin.zip" || die "kubelogin-nedlasting feilet."
+
+  unzip -q "$tmpdir/kubelogin.zip" -d "$tmpdir/kubelogin"
+  local bin
+  bin="$(find "$tmpdir/kubelogin" -name "kubelogin" -type f | head -n 1)"
+  [[ -n "$bin" ]] || die "kubelogin-binary ikke funnet etter utpakking."
+  install -m 0755 "$bin" /usr/local/bin/kubelogin
+  log "kubelogin installert: $(kubelogin --version 2>/dev/null || true)"
+}
+
 main() {
   install_base_prereqs
   remove_snaps_and_prefer_native
   configure_lid_on_ac
+
+  install_shell_tools
+  install_language_packs
+  install_python_tools
+  install_email_client
 
   install_node_lts_nodesource
 
@@ -384,12 +511,19 @@ main() {
   setup_vscode_repo_install
   setup_brave_repo_install
   setup_atuin_repo_install
+  setup_azure_cli_repo_install
+  setup_dotnet_repo_install    # Bruker Microsoft GPG-nøkkel fra setup_vscode_repo_install
 
+  setup_docker_ce_repo_install
   install_development_tools
   install_discord_deb
   install_slack_deb
   install_postman_tarball
   install_intellij
+
+  setup_kubectl_repo_install
+  install_k9s_binary
+  install_kubelogin_binary
 
   setup_mssql_compose_and_start
 
