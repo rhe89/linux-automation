@@ -324,6 +324,40 @@ EOF
   log "JetBrains Toolbox installert. Start med: jetbrains-toolbox (installer IntelliJ derfra)."
 }
 
+apply_system_preferences() {
+  log "Setter systempreferanser (GNOME gsettings)"
+  local u; u="$(invoking_user)"
+  local script_dir; script_dir="$(cd "$(dirname "$0")" && pwd)"
+  local prefs_script="$script_dir/set-system-preferences.sh"
+
+  if [[ ! -f "$prefs_script" ]]; then
+    warn "Fant ikke $prefs_script – hopper over systempreferanser."
+    return 0
+  fi
+
+  chmod +x "$prefs_script"
+
+  if [[ -n "${u:-}" && "$u" != "root" ]]; then
+    # gsettings må kjøres som bruker (ikke root) og trenger en aktiv D-Bus-sesjon.
+    local bus
+    bus="$(su - "$u" -c 'echo $DBUS_SESSION_BUS_ADDRESS' 2>/dev/null || true)"
+    if [[ -z "$bus" ]]; then
+      # Prøv å finne D-Bus-socket fra kjørende sesjon
+      bus="$(find /run/user -name "bus" 2>/dev/null | grep "$(id -u "$u")" | head -n 1 || true)"
+      [[ -n "$bus" ]] && bus="unix:path=$bus"
+    fi
+    if [[ -n "$bus" ]]; then
+      DBUS_SESSION_BUS_ADDRESS="$bus" su - "$u" -c "bash '$prefs_script'"
+    else
+      warn "Finner ikke D-Bus-sesjon for '$u' – logger inn via su for å kjøre preferanser."
+      su - "$u" -c "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u "$u")/bus bash '$prefs_script'" || \
+        warn "Kunne ikke sette systempreferanser. Kjør '$prefs_script' manuelt etter innlogging."
+    fi
+  else
+    bash "$prefs_script" || warn "Kunne ikke sette systempreferanser."
+  fi
+}
+
 setup_mssql_compose_and_start() {
   log "Setter opp MSSQL via docker compose (SA-passord: MSSQLonDocker19)"
   local u h dir
@@ -526,6 +560,8 @@ main() {
   install_kubelogin_binary
 
   setup_mssql_compose_and_start
+
+  apply_system_preferences
 
   log "Ferdig."
   warn "Anbefalt: reboot (lokk-innstilling + docker-gruppe)."
